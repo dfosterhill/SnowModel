@@ -12,16 +12,16 @@ clc
 
 %%%%% User needs to enter this info
 %give location of folder
-pathname='/Users/dfh/Box/Hill_Sync/Research/2017/CSO/GEE_to_micromet/cfsv2_Oregon_WY2018_UTM10_EPSG32610';
+pathname='/Volumes/dfh/Hill/GOA_runoff/CFSv2_GOA_from_GEE/2018';
 
 %give the 'root' pathname of the files. Note: we will append things like _elev.tif,
 % _prec.tif, and so on...
-filename='cfsv2_2018-09-01';
+filename='cfsv2_2018_WY_GOA';
 
-outfilename='mm_test.dat'; %please use something descriptive to help identify the output file.
+outfilename='mm_goa_2016-2018.dat'; %please use something descriptive to help identify the output file.
 
 %give start time information
-startyear=2017;
+startyear=2016;
 startmonth=9;
 startday=1;
 pointsperday=4; %use 4 for 6-hourly data, 8 for 3-hourly data, etc.
@@ -52,7 +52,7 @@ tmpfile=[filename '_vwind.tif'];  % m/s
 [V,R_v]=geotiffread(fullfile(pathname,tmpfile));
 
 %compute number of grid points and time steps from size of 3d matrix
-[y,x,t]=size(Z);
+[y,x,t]=size(Pr);
 gridpts=x*y;
 tsteps=t;
 
@@ -68,8 +68,19 @@ ID=1e6+[1:1:gridpts]';
 info=geotiffinfo(fullfile(pathname,tmpfile));
 [X,Y]=pixcenters(info,'makegrid');
 
-%elevation is static (doesn't changge with time)
+%elevation is static (doesn't change with time)
 elev=Z(:,:,1);
+
+%find number of grid points with <0 elevation. Note: this is related to the
+%subroutine met_data_check in the preprocess_code.f. that subroutine seems
+%to suggest that negative elevations are ok (say, death valley). But, the
+%code itself checks for negative elevations and stops execution is any
+%negatives are found. So, here, I scan for negative depths (say, a weather
+%analysis grid point over the ocean, where bathymetric depths are below sea
+%level) and I remove those points from the output that I create.
+I=find(elev(:)<=0);
+numnegz=length(I); %number of points with negative depths.
+validgridpts=gridpts-numnegz;
 
 %we are now ready to begin our main loop over the time steps.
 fid=fopen(fullfile(pathname,outfilename),'w');
@@ -78,7 +89,7 @@ fid=fopen(fullfile(pathname,outfilename),'w');
 fmt='%5d %3d %3d %6.3f %9d %12.1f %12.1f %8.1f %9.2f %9.2f %9.2f %9.2f %9.2f\n';
 for j=1:tsteps
     %first we write the number of grid points
-    fprintf(fid,'%6d\n',gridpts);
+    fprintf(fid,'%6d\n',validgridpts);
     
     %prep data matrix for this time step. First, grab the jth time slice
     Prtmp=Pr(:,:,j);
@@ -107,6 +118,10 @@ for j=1:tsteps
     data=[y(j)*ones(size(ID)) m(j)*ones(size(ID)) d(j)*ones(size(ID)) ...
         h(j)*ones(size(ID)) ID X(:) Y(:) elev(:) Ttmp(:) RHtmp(:) SPDtmp(:) ...
         DIRtmp(:) Prtmp(:)];
+    
+    %remove data at points with neg elevations
+    data(I,:)=[];
+    
     fprintf(fid,fmt,data');
     
     %display progress to screen.
