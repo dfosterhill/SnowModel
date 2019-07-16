@@ -18,6 +18,7 @@
 
 %created by David Hill (dfh@oregonstate.edu)
 %June 2019
+%inserting test comment to see if I have git working correctly...
 
 %NOTE: you will need arcgridwrite from the file exchange
 
