@@ -1,4 +1,6 @@
 function arcgridwrite(fileName,X,Y,Z,varargin)
+%test comment
+
 %ARCGRIDWRITE- Write gridded data set in Arc ASCII Grid Format
 %
 %   ARCGRIDWRITE(fileName,X,Y,Z)- converts data in a matlab
