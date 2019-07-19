@@ -1,6 +1,6 @@
 # Overview
 
-This repository stores for scripts related to pre- / post-processing files for [Glen Liston's](https://www.cira.colostate.edu/staff/liston-glen/) MicroMet/SnowModel/HydroFlow models. See manuscript [here] for more details on the modeling suite. 
+This repository stores for scripts related to pre- / post-processing files for [Glen Liston's](https://www.cira.colostate.edu/staff/liston-glen/) MicroMet/SnowModel/HydroFlow models. See manuscript [here](https://journals.ametsoc.org/doi/full/10.1175/JHM548.1) for more details on the modeling suite. 
 
 ## Matlab
 
