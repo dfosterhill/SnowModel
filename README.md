@@ -9,6 +9,8 @@ This repository stores for scripts related to pre- / post-processing files for [
 
 ## Google Earth Engine
 
+1. define_sm_inputs.js
+
 You will need to be registered with a Google Earth Engine account to run these scripts. If you don't already have an account you can sign up for one [here](https://signup.earthengine.google.com/#!/).
 
 1. In GEE, in the left toolbar, select 'New' - 'File' from the red dropdown box. Enter a path, a filename, and a description.
