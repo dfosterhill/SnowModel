@@ -9,9 +9,11 @@
 %   5. xxx_tair.tif  -  air temperature at CFSv2 nodes
 %   6. xxx_uwind.tif  -  east/west wind at CFSv2 nodes
 %   7. xxx_vwind.tif  -  north/south wind at CFSv2 nodes
-%   8. DEM_domainname.tif  -  high-res terrain model of model domain
-%   9. NLCD2016_domainname.tif  -  high-res land cover of model domain
-%   10. A total of 24 PRISM grids. 12 months x 2 variables (ppt and tmean)
+%   8. xxx_lwr.tif  -  downward longwave radiation flux at CFSv2 nodes
+%   9. xxx_swr.tif  -  downward shortwave radiation flux at CFSv2 nodes
+%   10. DEM_domainname.tif  -  high-res terrain model of model domain
+%   11. NLCD2016_domainname.tif  -  high-res land cover of model domain
+%   12. A total of 24 PRISM grids. 12 months x 2 variables (ppt and tmean)
 
 %NOTE that Crumley's script can be altered to use a variety of DEM and land
 %cover products. If you make changes there, you may have to make changes
@@ -19,6 +21,7 @@
 
 %created by David Hill (dfh@oregonstate.edu)
 %June 2019
+%FLAG_MET_EXTRA added by Nina, Dec 2019
 
 %NOTE: you will need arcgridwrite from the file exchange
 
@@ -31,20 +34,21 @@ clc
 %%%%% begin user input
 
 FLAG_MET=1;         %set to 1 if you want to convert meteo forcing (most common task)
-FLAG_DEM_LC=1;      %set to 1 if you want to convert DEM and 
+FLAG_MET_EXTRA=1;   %set to 1 if you want incoming LWR & SWR
+FLAG_DEM_LC=0;      %set to 1 if you want to convert DEM and 
                     %Land Cover (typically only needed once)
-FLAG_DEM_EXTRA=1;   %set to 1 if you want the 'extra' lon/lat grids 
+FLAG_DEM_EXTRA=0;   %set to 1 if you want the 'extra' lon/lat grids 
                     %for large domains (typically only needed once)
-FLAG_LR=1;          %set to 1 if you want to compute lapse rates / adjustment
+FLAG_LR=0;          %set to 1 if you want to compute lapse rates / adjustment
                     %factors from PRISM data (typically only needed once)
 
 %give location of folder containing files from GEE
-pathname='/Users/dfh/Box/Hill_Sync/Research/2017/CSO/GEE_to_micromet/wy_snowmodel_test';
+pathname='/Users/aragon/Documents/OSU/CSO/WY/GEE2';
 
 %Info re: the files names out of Crumley GEE script
 %give the 'root' pathname of the met files. Note: we will append things like _elev.tif,
 % _prec.tif, and so on...
-filename='cfsv2_2018-09-01';
+filename='cfsv2_2014-10-01_2019-09-30';
 
 %give names of dem and land cover
 demname='DEM_WY.tif';
@@ -55,11 +59,11 @@ lcname='NLCD2016_WY.tif';
 domain='WY';
 
 %give the desired output name of the met file
-outfilename='mm_wy_2017-2018.dat'; %please use something descriptive to help identify the output file.
+outfilename='mm_wy_2014-2019.dat'; %please use something descriptive to help identify the output file.
 
 %give start time information
-startyear=2017;
-startmonth=9;
+startyear=2014;
+startmonth=10;
 startday=1;
 pointsperday=4; %use 4 for 6-hourly data, 8 for 3-hourly data, etc.
 starthour=0;
@@ -170,6 +174,111 @@ if FLAG_MET
         tmp=round(tsteps/10);
         if mod(j,tmp)==0
             disp(['conversion is ' num2str(j/tsteps*100) ' % done']);
+        end
+    end
+    fclose(fid);
+end  
+    
+%% In this section, we will deal with the climate data files
+%load files. All the Rs should be the same, but I read them in as different
+%references anyway.
+
+if FLAG_MET_EXTRA
+    
+    tmpfile=[filename '_elev.tif']; % m
+    [Z,R_z]=geotiffread(fullfile(pathname,tmpfile));
+
+    tmpfile=[filename '_swr.tif']; % W/m^2
+    [S,R_s]=geotiffread(fullfile(pathname,tmpfile));
+    
+
+    tmpfile=[filename '_lwr.tif']; % W/m^2
+    [L,R_l]=geotiffread(fullfile(pathname,tmpfile));
+
+    %compute number of grid points and time steps from size of 3d matrix
+    [y,x,t]=size(S);
+    gridpts=x*y;
+    tsteps=t;
+
+    %create y m d h vectors
+    initialdatenum=datenum(startyear,startmonth,startday,starthour,0,0);
+    datenums=initialdatenum+(1/pointsperday)*[0:1:tsteps-1]';
+    [y,m,d,h,mins,sec]=datevec(datenums); %dont care about min / sec
+
+    %create ID numbers for the grid points
+    ID=1e6+[1:1:gridpts]';
+
+    %create matrices of x and y values
+    info=geotiffinfo(fullfile(pathname,tmpfile));
+    [X,Y]=pixcenters(info,'makegrid');
+
+    %elevation is static (doesn't change with time)
+    elev=Z(:,:,1);
+
+    %find number of grid points with <0 elevation. Note: this is related to the
+    %subroutine met_data_check in the preprocess_code.f. that subroutine seems
+    %to suggest that negative elevations are ok (say, death valley). But, the
+    %code itself checks for negative elevations and stops execution is any
+    %negatives are found. So, here, I scan for negative depths (say, a weather
+    %analysis grid point over the ocean, where bathymetric depths are below sea
+    %level) and I remove those points from the output that I create.
+    I=find(elev(:)<=0);
+    numnegz=length(I); %number of points with negative depths.
+    validgridpts=gridpts-numnegz;
+
+    %we are now ready to begin loop over the time steps.
+    fid=fopen(fullfile(pathname,'shortwave.dat'),'w');
+
+    %define main format string
+    fmt='%5d %3d %3d %6.3f %9d %12.1f %12.1f %8.1f %9.2f\n';
+    %create swr .dat file
+    for j=1:tsteps
+        %first we write the number of grid points
+        fprintf(fid,'%6d\n',validgridpts);
+
+        %prep data matrix for this time step. First, grab the jth time slice
+        Stmp=S(:,:,j);
+
+        data=[y(j)*ones(size(ID)) m(j)*ones(size(ID)) d(j)*ones(size(ID)) ...
+            h(j)*ones(size(ID)) ID X(:) Y(:) elev(:) Stmp(:)];
+
+        %remove data at points with neg elevations
+        data(I,:)=[];
+
+        fprintf(fid,fmt,data');
+
+        %display progress to screen.
+        tmp=round(tsteps/10);
+        if mod(j,tmp)==0
+            disp(['SWR conversion is ' num2str(j/tsteps*100) ' % done']);
+        end
+    end
+    fclose(fid);
+    
+    %we are now ready to begin loop over the time steps.
+    fid=fopen(fullfile(pathname,'longwave.dat'),'w');
+
+    %define main format string
+    fmt='%5d %3d %3d %6.3f %9d %12.1f %12.1f %8.1f %9.2f\n';    %create lwr .dat file
+    for j=1:tsteps
+        %first we write the number of grid points
+        fprintf(fid,'%6d\n',validgridpts);
+
+        %prep data matrix for this time step. First, grab the jth time slice
+        Ltmp=L(:,:,j);
+
+        data=[y(j)*ones(size(ID)) m(j)*ones(size(ID)) d(j)*ones(size(ID)) ...
+            h(j)*ones(size(ID)) ID X(:) Y(:) elev(:) Ltmp(:)];
+
+        %remove data at points with neg elevations
+        data(I,:)=[];
+
+        fprintf(fid,fmt,data');
+
+        %display progress to screen.
+        tmp=round(tsteps/10);
+        if mod(j,tmp)==0
+            disp(['LWR conversion is ' num2str(j/tsteps*100) ' % done']);
         end
     end
     fclose(fid);
@@ -332,7 +441,7 @@ if FLAG_LR
         [tmean,R]=geotiffread(fullfile(pathname,[months{j} 'tmean.tif']));
         p=polyfit(double(DEM(:))/1000,tmean(:),1); %div by 1000 to make deg / km.
         temp_lapse(j)=-p(1);    %use neg to make a pos number. See micromet.f for explanation.
-        disp(['absolute value ' months{1} ' temp lapse rate (deg / km) = ' num2str(temp_lapse(j),2)])  
+        disp(['absolute value ' months{j} ' temp lapse rate (deg / km) = ' num2str(temp_lapse(j),2)])  
     end
     disp(' ');
     
