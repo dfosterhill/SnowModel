@@ -1,5 +1,6 @@
 // Script written by Ryan L. Crumley, July 2019
 // Edited by DFH to add PRISM and fix NLCD, July 2019
+// Edited by Nina to add SWR & LWR, Dec 2019
  
 // When using this script, simply copy and paste to your own file directory system.
 // Experiment and make changes to your own version of this script.
@@ -74,8 +75,8 @@ var lc_name = 'NLCD2016';
 // This will start on the 'begin' date at 0:00 and the last iteration will be 
 // on the day before the 'end' date below. Look at the printed variable 'tair from CFSv2' 
 // in the console to double check.
-var begin = '2017-09-01';
-var end = '2018-09-01';
+var begin = '2014-09-01';
+var end = '2019-09-01';
 
 //////////////////////////////////////////////////////////////////
 /////////////////      DOMAIN     ////////////////////////////////
@@ -302,6 +303,8 @@ var vwind = cfsv2.select('v-component_of_wind_height_above_ground').toBands();
 var surfpres = cfsv2.select('Pressure_surface').toBands();
 var spechum = cfsv2.select('Specific_humidity_height_above_ground').toBands();
 var prec = cfsv2.select('Precipitation_rate_surface_6_Hour_Average').toBands();
+var lwr = cfsv2.select('Downward_Long-Wave_Radp_Flux_surface_6_Hour_Average').toBands();
+var swr = cfsv2.select('Downward_Short-Wave_Radiation_Flux_surface_6_Hour_Average').toBands();
 // To check the time iterations, look at the printed variable in the console
 print(tair, 'tair from CFSv2');
 
@@ -341,7 +344,7 @@ Export.image.toDrive({
 // Export the CFSv2 Temp to Geotiff 
 Export.image.toDrive({
   image: tair,
-  description: 'cfsv2_'+end+'_tair',
+  description: 'cfsv2_'+begin+end+'_tair',
   region: my_domain2,
   scale: 22200,
   crs: epsg_code,
@@ -351,7 +354,7 @@ Export.image.toDrive({
 // Export the CFSv2 Temp to Geotiff 
 Export.image.toDrive({
   image: elev,
-  description: 'cfsv2_'+end+'_elev',
+  description: 'cfsv2_'+begin+end+'_elev',
   region: my_domain2,
   scale: 22200,
   crs: epsg_code,
@@ -360,7 +363,7 @@ Export.image.toDrive({
 // Export the CFSv2 Prec to Geotiff 
 Export.image.toDrive({
   image: prec,
-  description: 'cfsv2_'+end+'_prec' ,
+  description: 'cfsv2_'+begin+end+'_prec' ,
   region: my_domain2,
   scale: 22200,
   crs: epsg_code,
@@ -369,7 +372,7 @@ Export.image.toDrive({
 // Export the CFSv2 Uwind to Geotiff 
 Export.image.toDrive({
   image: uwind,
-  description: 'cfsv2_'+end+'_uwind' ,
+  description: 'cfsv2_'+begin+end+'_uwind' ,
   region: my_domain2,
   scale: 22200,
   crs: epsg_code,
@@ -379,7 +382,7 @@ Export.image.toDrive({
 // Export the CFSv2 Vwind to Geotiff 
 Export.image.toDrive({
   image: vwind,
-  description: 'cfsv2_'+end+'_vwind' ,
+  description: 'cfsv2_'+begin+end+'_vwind' ,
   region: my_domain2,
   scale: 22200,
   crs: epsg_code,
@@ -388,7 +391,7 @@ Export.image.toDrive({
 // Export the CFSv2 Surfpres to Geotiff 
 Export.image.toDrive({
   image: surfpres,
-  description: 'cfsv2_'+end+'_surfpres' ,
+  description: 'cfsv2_'+begin+end+'_surfpres' ,
   region: my_domain2,
   scale: 22200,
   crs: epsg_code,
@@ -397,7 +400,25 @@ Export.image.toDrive({
 // Export the CFSv2 RedHum to Geotiff 
 Export.image.toDrive({
   image: spechum,
-  description: 'cfsv2_'+end+'_spechum' ,
+  description: 'cfsv2_'+begin+end+'_spechum' ,
+  region: my_domain2,
+  scale: 22200,
+  crs: epsg_code,
+});
+
+// Export the CFSv2 LWR to Geotiff 
+Export.image.toDrive({
+  image: lwr,
+  description: 'cfsv2_'+begin+end+'_lwr' ,
+  region: my_domain2,
+  scale: 22200,
+  crs: epsg_code,
+});
+
+// Export the CFSv2 SWR to Geotiff 
+Export.image.toDrive({
+  image: swr,
+  description: 'cfsv2_'+begin+end+'_swr' ,
   region: my_domain2,
   scale: 22200,
   crs: epsg_code,
@@ -669,7 +690,6 @@ var minLong = -146.4828057
 var maxLat = 61.538588
 // Input the max Long, upper right corner
 var maxLong = -144.879882
-
 //GOA Domain
 // Input the minimum lat, lower left corner
 var minLat = 56.2819
@@ -696,22 +716,18 @@ var maxLong = -122.7722
 /////////////   ASPECT/SLOPE/HILLSHADE  //////////////////
 ///////////////////////////////////////////////////////////////
 /*
-
 // This pre-cooked GEE function calculates slope in degrees (0-90) from the DEM layer.
 // It uses a 4 connected neighbors approach and edge pixels will have missing data.
 var slope = ee.Terrain.slope(DEM);
 Map.addLayer(slope,{},'Slope');
-
 // This pre-cooked GEE function calculates aspect in degrees (0-365) from the DEM layer.
 // It uses a 4 connected neighbors approach and edge pixels will have missing data.
 var aspect = ee.Terrain.aspect(DEM);
 Map.addLayer(aspect,{},'Aspect');
-
 // This pre-cooked GEE function creates a hillshade layer from the DEM.
 // This can come in handy when trying to recognize local geography and physical features.
 var hillshade = ee.Terrain.hillshade(DEM);
 Map.addLayer(hillshade,visHillshade,'Hillshade');
-
 // This pre-cooked function allows all of the terrain products to be visualized in a single,
 // multi-band image. I like the red tinted visualization the best, with hillshade, slope, and
 // elevation data as the RGB layers. 
